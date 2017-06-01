@@ -23,7 +23,7 @@ angular.module('starter', ['ionic', 'ngCordova', 'ngStorage'])
   });
 })
 
-.controller('mainCntrl', function($scope, $timeout){
+.controller('mainCntrl', function($scope, $timeout, $http, $q){
   $scope.scanprogress = "Bluetooh started";
   $scope.showButton = false;
   $scope.spin = {};
@@ -31,6 +31,9 @@ angular.module('starter', ['ionic', 'ngCordova', 'ngStorage'])
   $scope.bluetoothInitialized = false;
   $scope.spin.services = [];
   $scope.readValue = [];
+  $scope.hD='0123456789ABCDEF';
+
+  $scope.chemicalResults = [];
 
   $scope.init = function(){
 
@@ -99,9 +102,11 @@ $scope.discoverSpin = function(){
 
 $scope.subscribe = function(){
   bluetoothle.subscribe(function(obj) {
-      var bytes = bluetoothle.encodedStringToBytes(obj.value);
-      $scope.readValue.push({value:bluetoothle.bytesToString(bytes)});
+    if(obj.value !== undefined){
       $scope.$apply();
+      bluetoothle.read(function(result){ $scope.capturedResult(result) },function(e) { $scope.console(err) },
+        {"address":$scope.spin.address, "service":$scope.spin.service, "characteristic":"00000000-0000-1000-8000-BBBD00000010"});
+   }
   }, function(err) {
     $scope.console(err);
   }, {
@@ -110,6 +115,85 @@ $scope.subscribe = function(){
     "characteristic": $scope.spin.characteristic
   });
 }
+
+$scope.dec2hex = function(d){
+    var h = $scope.hD.substr(d&15,1);
+    while (d>15) {
+    d>>=4;
+    h=$scope.hD.substr(d&15,1)+h;
+    }
+    h = h.toLowerCase();
+    return h;
+}
+
+
+$scope.capturedResult = function(result){
+  var output = bluetoothle.encodedStringToBytes(result.value);
+  
+  $scope.readings  = [];
+  for (i=0; i<output.length; i++) {
+         $scope.readings.push((output[i]<16?"0":"") + $scope.dec2hex(output[i]));
+  }
+  
+ 
+   $scope.chemicalResults = [];
+  //Get Chemicals
+  $scope.constructSpinData(9, 5, 'FCL').then(function(obj){
+    $scope.chemicalResults.push(obj);
+  })
+ 
+  $scope.constructSpinData(15, 11, 'TCL').then(function(obj){
+    $scope.chemicalResults.push(obj);
+  })
+  $scope.constructSpinData(21, 17, 'CCL').then(function(obj){
+    $scope.chemicalResults.push(obj);
+  })
+  $scope.constructSpinData(27, 23, 'pH').then(function(obj){
+    $scope.chemicalResults.push(obj);
+  })
+  $scope.constructSpinData(33, 29, 'ALK').then(function(obj){
+    $scope.chemicalResults.push(obj);
+  })
+  $scope.constructSpinData(39, 35, 'HARD').then(function(obj){
+    $scope.chemicalResults.push(obj);
+  })
+  $scope.constructSpinData(45, 41, 'CYA').then(function(obj){
+    $scope.chemicalResults.push(obj);
+  })
+   $scope.constructSpinData(51, 47, 'COPPER').then(function(obj){
+    $scope.chemicalResults.push(obj);
+  })
+  $scope.constructSpinData(57, 53, 'IRON').then(function(obj){
+    $scope.chemicalResults.push(obj);
+  })
+  $scope.constructSpinData(63, 59, 'BORATE').then(function(obj){
+    $scope.chemicalResults.push(obj);
+    
+  })
+
+}
+
+$scope.constructSpinData = function(toInt, fromInt, name){
+  var defer = $q.defer();
+  var hexa = '';
+  var obj = {};
+  obj.name = name;
+  
+  for(var i=toInt;i>fromInt;i--){
+    hexa += $scope.readings[i];
+  }
+   //Convert Hexa to Decimal 
+  $http.get('http://reseller.pooltrackr.com/api/hextodecimal/' + hexa).then(function(data){
+    var fixedNo = parseInt($scope.readings[fromInt], 16);
+    obj.result = parseFloat(data.data.msg).toFixed(fixedNo);
+    defer.resolve(obj);
+  }, function(err){
+    defer.reject(err);
+  })
+  return defer.promise;
+}
+
+
 
 $scope.console = function(value){
   console.log(value);
